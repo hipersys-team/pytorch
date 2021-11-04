@@ -76,7 +76,7 @@ class BackendImplInterface {
   // the backend should use, and matters if the backend supports more than one type of real
   // device.
   virtual torch_lazy_tensors::BackendDeviceType GetDefaultDeviceType() const = 0;
-  virtual std::string SetDefaultDeviceType(torch_lazy_tensors::BackendDeviceType) const = 0;
+  virtual void SetDefaultDeviceType(std::string device_type) const = 0;
 
   // Query all available backend devices
   virtual torch_lazy_tensors::BackendDevice GetBackendDevices() const = 0;

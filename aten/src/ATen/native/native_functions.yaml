@@ -104,6 +104,13 @@
 - func: _unpack_dual(Tensor(a) dual, int level) -> (Tensor(a) primal, Tensor tangent)
   variants: function
 
+# _new_zeros_with_same_feature_meta needs to be CompositeExplicitAutograd for
+# jvp support in functorch
+- func: _new_zeros_with_same_feature_meta(Tensor self, Tensor other, int num_feature_dims) -> Tensor
+  variants: function
+  dispatch:
+    CompositeExplicitAutograd: _new_zeros_with_same_feature_meta
+
 - func: rename_(Tensor(a!) self, Dimname[]? names) -> Tensor(a!)
   variants: method
 

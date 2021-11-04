@@ -5,6 +5,7 @@
 #include <atomic>
 
 #include "lazy_tensor_core/csrc/compiler/data.h"
+#include "lazy_tensor_core/csrc/device.h"
 #include "lazy_tensor_core/csrc/lowering_context.h"
 #include "lazy_tensors/shape.h"
 
@@ -70,21 +71,30 @@ class BackendImplInterface {
    * Device Configuration
    * */
 
-  virtual std::string GetDefaultDevice() const = 0;
+  // Set or get the default device type.
+  // For backends used with virtual c10:: Devices, this configures what real device type
+  // the backend should use, and matters if the backend supports more than one type of real
+  // device.
+  virtual torch_lazy_tensors::BackendDeviceType GetDefaultDeviceType() const = 0;
+  virtual std::string SetDefaultDeviceType(torch_lazy_tensors::BackendDeviceType) const = 0;
 
-  virtual size_t GetNumDevices() const = 0;
+  // Query all available backend devices
+  virtual torch_lazy_tensors::BackendDevice GetBackendDevices() const = 0;
 
-  virtual std::vector<std::string> GetLocalDevices() const = 0;
+  // Map a particular c10:: device to a concrete backend device
+  // Note:: c10:: devices may be virtual or concrete.  xla:: and lazy:: are virtual
+  // devices, meaning they may map to a gpu, tpu, etc. behind the scenes.
+  // In the future, non-virtual c10:: devices may also use lazy tensors through a mode,
+  // in which case these APIs should still work, but should be identity mappings.
+  virtual torch_lazy_tensors::BackendDevice GetBackendDevice(c10::Device device) const = 0;
 
-  virtual std::vector<std::string> GetAllDevices() const = 0;
 
-  virtual void SetReplicationDevices(
-      std::shared_ptr<std::vector<std::string>> devices) const = 0;
-
-  virtual std::shared_ptr<std::vector<std::string>> GetReplicationDevices()
-      const = 0;
-
+  // TODO(whc) can we remove this?  we are using it for Conv, Empty ops in TS backend, to do
+  // cuda-specific things.  This is the kind of thing we wanted to avoid at this layer.
   virtual at::DeviceType HardwareDeviceType() const = 0;
+
+  // TODO(whc)
+  // Additional APIs expected for supporting distributed training, to be designed
 
   /**
    * Debug/Metrics

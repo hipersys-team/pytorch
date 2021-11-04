@@ -79,7 +79,7 @@ class BackendImplInterface {
   virtual void SetDefaultDeviceType(std::string device_type) const = 0;
 
   // Query all available backend devices
-  virtual torch_lazy_tensors::BackendDevice GetBackendDevices() const = 0;
+  virtual std::vector<torch_lazy_tensors::BackendDevice> GetBackendDevices() const = 0;
 
   // Map a particular c10:: device to a concrete backend device
   // Note:: c10:: devices may be virtual or concrete.  xla:: and lazy:: are virtual

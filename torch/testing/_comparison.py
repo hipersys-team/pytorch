@@ -1,9 +1,11 @@
 import abc
 import cmath
 import collections.abc
+import contextlib
 from typing import NamedTuple, Callable, Sequence, List, Union, Optional, Type, Tuple, Any, cast
 
 import torch
+from torch._C import ScriptList, ScriptDict  # type: ignore[attr-defined]
 
 from ._core import _unravel_index
 
@@ -20,6 +22,8 @@ class ErrorMeta(NamedTuple):
         return self.type(msg)
 
 
+# Some analysis of tolerance by logging tests from test_torch.py can be found in
+# https://github.com/pytorch/pytorch/pull/32538.
 _DTYPE_PRECISIONS = {
     torch.float16: (0.001, 1e-5),
     torch.bfloat16: (0.016, 1e-5),
@@ -264,6 +268,7 @@ class NumberPair(Pair):
         float: torch.float64,
         complex: torch.complex128,
     }
+    _NUMBER_TYPES = tuple(_TYPE_TO_DTYPE.keys())
 
     def __init__(
         self,
@@ -277,7 +282,7 @@ class NumberPair(Pair):
         check_dtype: bool = False,
         **other_parameters: Any,
     ) -> None:
-        self._check_inputs_isinstance(actual, expected, cls=tuple(self._TYPE_TO_DTYPE.keys()))
+        self._check_inputs_isinstance(actual, expected, cls=self._NUMBER_TYPES)
         error_meta, tolerances = parse_tolerances(
             *[self._TYPE_TO_DTYPE.get(type(input), torch.float64) for input in (actual, expected)], rtol=rtol, atol=atol
         )
@@ -623,9 +628,9 @@ def originate_pairs(
     # We explicitly exclude str's here since they are self-referential and would cause an infinite recursion loop:
     # "a" == "a"[0][0]...
     if (
-        isinstance(actual, collections.abc.Sequence)
+        isinstance(actual, (collections.abc.Sequence, ScriptList))
         and not isinstance(actual, str)
-        and isinstance(expected, collections.abc.Sequence)
+        and isinstance(expected, (collections.abc.Sequence, ScriptList))
         and not isinstance(expected, str)
     ):
         actual_len = len(actual)
@@ -647,7 +652,9 @@ def originate_pairs(
 
         return None, pairs
 
-    elif isinstance(actual, collections.abc.Mapping) and isinstance(expected, collections.abc.Mapping):
+    elif isinstance(actual, (collections.abc.Mapping, ScriptDict)) and isinstance(
+        expected, (collections.abc.Mapping, ScriptDict)
+    ):
         actual_keys = set(actual.keys())
         expected_keys = set(expected.keys())
         if actual_keys != expected_keys:
@@ -664,7 +671,11 @@ def originate_pairs(
             )
             return error_meta, None
 
-        for key in sorted(actual_keys):
+        # Since the origination aborts after the first failure, we try to be deterministic
+        with contextlib.suppress(Exception):
+            actual_keys = sorted(actual_keys)
+
+        for key in actual_keys:
             error_meta, partial_pairs = originate_pairs(
                 actual[key], expected[key], pair_types=pair_types, id=(*id, key), **options
             )

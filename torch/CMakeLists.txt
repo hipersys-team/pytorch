@@ -279,7 +279,7 @@ if(USE_DISTRIBUTED)
     list(APPEND TORCH_PYTHON_COMPILE_DEFINITIONS USE_C10D)
 endif()
 
-list(APPEND TORCH_PYTHON_LINK_LIBRARIES ibverbs hugetlbfs ../../grpc/build/lib/libprotobuf.so ../../grpc/build/lib/libgrpc.so ../../grpc/build/lib/libgrpc++.so)
+list(APPEND TORCH_PYTHON_LINK_LIBRARIES ibverbs hugetlbfs ${TORCH_ROOT}/../grpc/build/lib/libprotobuf.so ${TORCH_ROOT}/../grpc/build/lib/libgrpc.so ${TORCH_ROOT}/../grpc/build/lib/libgrpc++.so)
 
 if(USE_NCCL AND NOT WIN32)
     list(APPEND TORCH_PYTHON_SRCS

@@ -1,3 +1,11 @@
+// TODO: find in which cmake file to add USE_SWITCHML
+#ifdef USE_SWITCHML
+#pragma message("USE_SWITCHML enabled in ProcessGroupGloo.cpp")
+#else
+#pragma message("USE_SWITCHML was not enabled in ProcessGroupGloo.cpp. We will enable it now.")
+#define USE_SWITCHML
+#endif
+
 #include <c10d/ProcessGroupGloo.hpp>
 
 #include <c10d/GlooDeviceFactory.hpp>
@@ -35,6 +43,10 @@
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
+#endif
+
+#ifdef USE_SWITCHML
+#include <switchml/context.h>
 #endif
 
 #include <c10/util/StringUtil.h>
@@ -575,6 +587,11 @@ ProcessGroupGloo::ProcessGroupGloo(
     throw std::runtime_error("No device(s) specified");
   }
 
+#ifdef USE_SWITCHML
+  // Create and start the switchml context
+  switchml::Context::GetInstance().Start();
+#endif  
+
   // Create and connect a context for every device.
   //
   // Note that the same device can be specified multiple times, either
@@ -624,6 +641,11 @@ ProcessGroupGloo::~ProcessGroupGloo() {
   for (auto& thread : threads_) {
     thread.join();
   }
+
+#ifdef USE_SWITCHML
+  switchml::Context::GetInstance().Stop();
+#endif
+
 }
 
 uint32_t ProcessGroupGloo::nextTag() {
@@ -1190,6 +1212,14 @@ class AsyncAllreduceCUDAWork : public AsyncAllreduceWork {
       ReduceOp reduceOp,
       uint32_t tag)
       : AsyncAllreduceWork(context, inputs, reduceOp, tag) {
+    
+#ifdef USE_SWITCHML
+    const auto& scalarType = inputs[0].scalar_type();
+    // These are the cases where we will use switchml. Otherwise we let gloo handle it.
+    this->SWITCHML = inputs.size()==1 && // Means that a single GPU is used per host
+                     reduceOp == ReduceOp::SUM &&
+                     (scalarType == ::at::ScalarType::Float || scalarType == ::at::ScalarType::Int);
+#endif
     initializeStreamsEvents(inputs, streams, events);
 
     // Kick off copy from CUDA tensors to pinned CPU tensors.
@@ -1210,6 +1240,31 @@ class AsyncAllreduceCUDAWork : public AsyncAllreduceWork {
     }
 
     // Run allreduce on host side tensors.
+    // TODO: Pass original tensors not the temporary host side and let switchml handle it.
+#ifdef USE_SWITCHML
+    if(this->SWITCHML) {
+      // We only support 1 GPU per host.
+      // TODO: Generalize this to multi-gpus by performing a local allreduce.
+      GLOO_ENFORCE(tmp.size() == 1);
+      
+      const auto& scalarType = tmp[0].scalar_type();
+      switch(scalarType) {
+        case ::at::ScalarType::Float: {
+          float* data_ptr = getDataPointer<float>(tmp[0]);
+          switchml::Context::GetInstance().AllReduce(data_ptr, data_ptr, tmp[0].numel(), switchml::DataType::FLOAT32, switchml::AllReduceOperation::SUM);
+          break;
+        }
+        case ::at::ScalarType::Int: {
+          int32_t* data_ptr = getDataPointer<int32_t>(tmp[0]);
+          switchml::Context::GetInstance().AllReduce(data_ptr, data_ptr, tmp[0].numel(), switchml::DataType::INT32, switchml::AllReduceOperation::SUM);
+          break;
+        }
+        default:
+          std::cerr << "Data type error. This tensor cannot be passed to switchml. Data type: " << scalarType << std::endl;
+      }
+    }
+    else
+#endif
     allreduce(tmp);
 
     at::cuda::OptionalCUDAStreamGuard stream_guard;
@@ -1231,6 +1286,7 @@ class AsyncAllreduceCUDAWork : public AsyncAllreduceWork {
     }
   }
 
+  bool SWITCHML;
   std::vector<at::Tensor> tmp;
   std::vector<at::cuda::CUDAStream> streams;
   std::vector<at::cuda::CUDAEvent> events;

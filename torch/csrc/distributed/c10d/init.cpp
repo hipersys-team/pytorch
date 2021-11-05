@@ -1,3 +1,10 @@
+#ifdef USE_SWITCHML
+#pragma message("USE_SWITCHML enabled in init.cpp")
+#else
+#pragma message("USE_SWITCHML was not enabled in init.cpp. We will enable it now.")
+#define USE_SWITCHML
+#endif
+
 #include <torch/csrc/python_headers.h>
 
 #include <c10/util/intrusive_ptr.h>
@@ -1027,7 +1034,14 @@ Arguments:
             }
 
             options.timeout = timeout;
-            options.threads = options.devices.size() * 2;
+#ifndef USE_SWITCHML
+             options.threads = options.devices.size() * 2;
+#else
+            // We set options.threads to 1 because switchml only supports the existence of 1 context.
+            // Also we need only 1 thread to submit to switchml to ensure that tensors are processed by switchml
+            // in the same order across workers.
+            options.threads = 1;
+#endif
             return c10::make_intrusive<::c10d::ProcessGroupGloo>(
                 store, rank, size, options);
           }),

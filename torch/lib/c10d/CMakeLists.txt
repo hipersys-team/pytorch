@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 
+add_definitions(-DUSE_SWITCHML=1)
+message(STATUS "Building c10D with switchml support. Compilation FLAGS: ")
+
 # Find modules.
 list(APPEND CMAKE_MODULE_PATH
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/public
@@ -77,8 +80,15 @@ if(USE_C10D_GLOO)
 endif()
 
 add_library(c10d STATIC ${C10D_SRCS})
+
+# The following lines should be filled automatically using the pytorch patch makefile to 
+# include the appropriate libraries based on your switchml compilation flags.
+target_link_directories(c10d PUBLIC /home/amallery/switchml/p4app-switchML/dev_root/build/lib /home/amallery/switchml/p4app-switchML/dev_root/third_party/grpc/build/lib)
+target_link_libraries(c10d PUBLIC switchml-client pthread glog boost_program_options )
+target_include_directories(c10d PUBLIC /home/amallery/switchml/p4app-switchML/dev_root/build/include /home/amallery/switchml/p4app-switchML/dev_root/third_party/grpc/build/include)
+
 set_property(TARGET c10d PROPERTY POSITION_INDEPENDENT_CODE ON)
-set_property(TARGET c10d PROPERTY CXX_STANDARD 14)
+set_property(TARGET c10d PROPERTY CXX_STANDARD 17)
 
 if(NOT MSVC)
   target_compile_options(c10d PUBLIC
